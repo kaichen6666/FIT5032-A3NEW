@@ -146,6 +146,7 @@ export default {
         language: { search: 'Global Search:' }
       });
 
+
       // Enable column-specific search inputs
       table.columns().every(function () {
         const column = this;

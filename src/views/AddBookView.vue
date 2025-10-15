@@ -27,7 +27,7 @@
         />
       </div>
 
-      <!-- 来源 -->
+      <!-- Source -->
       <div class="mb-3">
         <label for="source" class="form-label">Book Source</label>
         <select id="source" class="form-select" v-model="source" required>
@@ -38,7 +38,7 @@
         </select>
       </div>
 
-      <!-- 类型 -->
+      <!-- type -->
       <div class="mb-3">
         <label for="type" class="form-label">Book Type</label>
         <select id="type" class="form-select" v-model="type" required>
@@ -50,7 +50,7 @@
         </select>
       </div>
 
-      <!-- 适龄人群 -->
+      <!-- age -->
       <div class="mb-3">
         <label for="ageGroup" class="form-label">Suitable Age Group</label>
         <select id="ageGroup" class="form-select" v-model="ageGroup" required>
@@ -62,7 +62,7 @@
         </select>
       </div>
 
-      <!-- 提交与清空 -->
+      <!-- submit -->
       <div class="text-center mt-4">
         <button type="submit" class="btn btn-primary me-2">Add Book</button>
         <button type="button" class="btn btn-secondary" @click="clearForm">
@@ -78,7 +78,7 @@ import { ref } from "vue"
 import { collection, addDoc } from "firebase/firestore"
 import { db } from "../main.js"
 
-// 所有字段
+// 
 const isbn = ref(null)
 const name = ref("")
 const source = ref("")

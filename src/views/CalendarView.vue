@@ -99,7 +99,7 @@ export default {
       await signOut(auth)
       this.user = null
     },
-    // Calendar click selection
+    // Calendar click selection .
     async handleSelect(info) {
       if (!this.user) {
         alert('❌ Please login first to create an event!')

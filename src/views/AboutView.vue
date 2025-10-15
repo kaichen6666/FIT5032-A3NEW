@@ -147,7 +147,7 @@ export default {
       });
 
 
-      // Enable column-specific search inputs
+      // Enable column-specific search inputs .
       table.columns().every(function () {
         const column = this;
         $('input', this.footer()).on('keyup change clear', function () {

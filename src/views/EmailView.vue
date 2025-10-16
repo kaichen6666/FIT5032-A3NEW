@@ -4,6 +4,10 @@
 
     <label for="to">Recipient Email:</label>
     <input type="email" id="to" v-model="to" placeholder="Enter recipient email" />
+    <!-- This input collects the recipient email address for sending emails via AWS SES (Simple Email Service). 
+     Because the SES account is currently in sandbox mode, only verified email addresses can be used for testing. 
+     Both the sender and recipient must be verified in SES. 
+     For this project, the verified recipient email is: wangjun6666666633@gmail.com -->
 
     <label for="subject">Subject:</label>
     <input type="text" id="subject" v-model="subject" placeholder="Email subject" />

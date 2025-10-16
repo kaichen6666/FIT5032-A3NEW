@@ -7,6 +7,9 @@ const fileUpload = require("express-fileupload");
 const AWS = require("aws-sdk");
 const admin = require("firebase-admin");
 
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+
 // ------------------------------
 // Initialize Firebase Admin SDK for real Firestore
 // ------------------------------
@@ -131,3 +134,49 @@ app.use((req, res) => {
 
 // Export Express app as Firebase Function
 exports.api = functions.https.onRequest(app);
+
+
+// ==============================
+// ⚡ Extra Cloud Function 1: Firestore Trigger (v2)
+// Automatically add a timestamp when a new book is created
+// ==============================
+exports.onBookCreated = onDocumentCreated("books/{bookId}", async (event) => {
+  const snapshot = event.data;
+  if (!snapshot) return;
+
+  const bookRef = snapshot.ref;
+  const createdAt = new Date().toISOString();
+
+  await bookRef.update({ createdAt });
+  console.log(`Timestamp added to book ${event.params.bookId}`);
+});
+
+// ==============================
+// 🕒 Extra Cloud Function 2: Scheduled Cleanup (v2)
+// Automatically delete old logs every 24 hours
+// ==============================
+exports.cleanupOldLogs = onSchedule(
+  {
+    schedule: "every 24 hours",
+    timeZone: "Australia/Sydney",
+  },
+  async (event) => {
+    const now = Date.now();
+    const cutoff = now - 30 * 24 * 60 * 60 * 1000; // 30 days
+    const snapshot = await db
+      .collection("logs")
+      .where("timestamp", "<", cutoff)
+      .get();
+
+    let deleted = 0;
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => {
+      batch.delete(doc.ref);
+      deleted++;
+    });
+    if (deleted > 0) await batch.commit();
+
+    console.log(`🧹 Cleaned up ${deleted} old logs.`);
+    return null;
+  }
+);

@@ -3,69 +3,131 @@ require("dotenv").config();
 const functions = require("firebase-functions");
 const express = require("express");
 const cors = require("cors");
-const Mailgun = require("mailgun-js");
+const fileUpload = require("express-fileupload");
+const AWS = require("aws-sdk");
+const admin = require("firebase-admin");
 
-const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY;
-const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN;
-
-const mailgun = Mailgun({
-  apiKey: MAILGUN_API_KEY,
-  domain: MAILGUN_DOMAIN,
+// ------------------------------
+// Initialize Firebase Admin SDK for real Firestore
+// ------------------------------
+const serviceAccount = require("./serviceAccountKey.json"); // path to your service account JSON
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
 });
+const db = admin.firestore();
+
+// ------------------------------
+// Configure AWS SES
+// ------------------------------
+AWS.config.update({
+  region: process.env.AWS_REGION,
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+});
+const ses = new AWS.SES({ apiVersion: "2010-12-01" });
 
 const app = express();
 app.use(cors({ origin: true }));
-app.use(express.json()); // 解析 JSON 请求
+app.use(express.json());
+app.use(fileUpload());
 
-// ✅ 授权邮箱列表（必须在 Mailgun Sandbox 里授权过）
-const authorizedEmails = [
-  "wangjun6666666633@gmail.com",
-  "kche0224@student.monash.edu"
-];
-
-function sendMailgunMessage(data) {
-  return new Promise((resolve, reject) => {
-    mailgun.messages().send(data, (err, body) => {
-      if (err) return reject(err);
-      resolve(body);
-    });
-  });
-}
-
-// POST /sendEmail
+// ==============================
+// 📩 Route 1: Send Email via AWS SES
+// ==============================
 app.post("/sendEmail", async (req, res) => {
-  console.log("📩 /sendEmail hit", req.body);
-
-  const { email, message } = req.body;
-  if (!email || !message) {
-    return res.status(400).json({ success: false, error: "Email and message are required." });
-  }
-
-  // 🔒 检查邮箱是否在授权列表
-  if (!authorizedEmails.includes(email)) {
-    return res.status(403).json({
-      success: false,
-      error: `The email "${email}" is not authorized in the Mailgun Sandbox.`
-    });
-  }
-
-  const data = {
-    from: `Mailgun Sandbox <postmaster@${MAILGUN_DOMAIN}>`,
-    to: email,
-    subject: "📚 Message from Firebase Library App",
-    text: message,
-  };
-
   try {
-    const body = await sendMailgunMessage(data);
-    return res.json({ success: true, body });
+    const { to, subject, message } = req.body;
+    const file = req.files?.attachment;
+
+    if (!to || !subject || !message) {
+      return res.status(400).json({
+        success: false,
+        message: "Recipient, subject, and message are required.",
+      });
+    }
+
+    const boundary = "NextPart_" + Date.now();
+    const fromEmail = process.env.FROM_EMAIL;
+
+    // Construct MIME email
+    const rawLines = [];
+    rawLines.push(`From: ${fromEmail}`);
+    rawLines.push(`To: ${to}`);
+    rawLines.push(`Subject: ${subject}`);
+    rawLines.push("MIME-Version: 1.0");
+    rawLines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+    rawLines.push("");
+    rawLines.push(`--${boundary}`);
+    rawLines.push("Content-Type: text/plain; charset=UTF-8");
+    rawLines.push("Content-Transfer-Encoding: 7bit");
+    rawLines.push("");
+    rawLines.push(message);
+    rawLines.push("");
+
+    if (file) {
+      const fileBase64 = file.data.toString("base64");
+      rawLines.push(`--${boundary}`);
+      rawLines.push(`Content-Type: ${file.mimetype}; name="${file.name}"`);
+      rawLines.push("Content-Transfer-Encoding: base64");
+      rawLines.push(`Content-Disposition: attachment; filename="${file.name}"`);
+      rawLines.push("");
+      const chunkSize = 76;
+      for (let i = 0; i < fileBase64.length; i += chunkSize) {
+        rawLines.push(fileBase64.slice(i, i + chunkSize));
+      }
+      rawLines.push("");
+    }
+
+    rawLines.push(`--${boundary}--`);
+    rawLines.push("");
+
+    const params = {
+      RawMessage: { Data: rawLines.join("\r\n") },
+      Source: fromEmail,
+    };
+
+    const result = await ses.sendRawEmail(params).promise();
+    res.json({ success: true, messageId: result.MessageId });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ success: false, error: err.message });
+    console.error("Error sending email:", err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 全局 404
-app.use((req, res) => res.status(404).json({ success: false, error: "Endpoint not found" }));
+// ==============================
+// 📡 Route 2: Fetch Users from Firestore
+// ==============================
+app.get("/users", async (req, res) => {
+  try {
+    const snapshot = await db.collection("users").get();
+    const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json({ success: true, count: users.length, data: users });
+  } catch (err) {
+    console.error("Error fetching users:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
+// ==============================
+// 📚 Route 3: Fetch Books from Firestore
+// ==============================
+app.get("/books", async (req, res) => {
+  try {
+    const snapshot = await db.collection("books").get();
+    const books = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json({ success: true, count: books.length, data: books });
+  } catch (err) {
+    console.error("Error fetching books:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ==============================
+// 404 Handler
+// ==============================
+app.use((req, res) => {
+  res.status(404).json({ success: false, error: "Endpoint not found." });
+});
+
+// Export Express app as Firebase Function
 exports.api = functions.https.onRequest(app);

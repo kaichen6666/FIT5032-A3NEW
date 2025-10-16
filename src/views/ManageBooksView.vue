@@ -89,6 +89,7 @@ import Chart from "chart.js";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import html2canvas from "html2canvas";
+import autoTable from "jspdf-autotable";
 
 // ----------------- reactive data -----------------
 const books = ref([]);
@@ -222,13 +223,13 @@ const exportPDF = async () => {
     b.ageGroup || ""
   ]);
 
-  doc.autoTable({
-    head: headers,
-    body: rows,
-    startY: 30,
-    styles: { fontSize: 10 },
-    headStyles: { fillColor: [63, 81, 181], textColor: 255 },
-  });
+  autoTable(doc, {
+  head: headers,
+  body: rows,
+  startY: 30,
+  styles: { fontSize: 10 },
+  headStyles: { fillColor: [63, 81, 181], textColor: 255 },
+});
 
   let yOffset = doc.lastAutoTable.finalY + 10;
 
